@@ -1,10 +1,16 @@
-/*
- * Compiling: gcc -nostdlib -static -fno-stack-protector o.c -o o
- */
-
 #include <stdint.h>
 
-// Direct syscall wrapper for x86_64
+// BAD implementation of memcpy! ARM64 requires memcpy to copy from .data to the stack.
+void *memcpy(void *dest, const void *src, unsigned int n)
+{
+	char *d = dest;
+	const char *s = src;
+	while (n--)
+		*d++ = *s++;
+	return dest;
+}
+
+// Multi platform syscalls
 #if defined(__x86_64__)
 // x86_64 Syscall Numbers
 #define SYS_WRITE 1
@@ -35,8 +41,8 @@ static inline int64_t syscall3(int64_t nr, int64_t a1, int64_t a2, int64_t a3)
 #define SYS_ACCEPT 202
 #define SYS_BIND 200
 #define SYS_LISTEN 201
-#define SYS_TIME 160
 #define SYS_EXIT 93
+#define SYS_GETTIME 113
 
 static inline int64_t syscall3(int64_t nr, int64_t a1, int64_t a2, int64_t a3)
 {
@@ -53,9 +59,11 @@ static inline int64_t syscall3(int64_t nr, int64_t a1, int64_t a2, int64_t a3)
 }
 
 #else
+// If anyone wants support for more architectures ($$$) email me at: s101553@pollub.edu.pl
 #error "Unsupported Architecture"
 #endif
 
+// Shrunk down syscalls
 static inline int64_t syscall2(int64_t nr, int64_t a1, int64_t a2)
 {
 	return syscall3(nr, a1, a2, 0);
@@ -66,74 +74,83 @@ static inline int64_t syscall1(int64_t nr, int64_t a1)
 	return syscall3(nr, a1, 0, 0);
 }
 
-// Syscall Numbers for Linux x86_64
-#define SYS_WRITE 1
-#define SYS_CLOSE 3
-#define SYS_SOCKET 41
-#define SYS_ACCEPT 43
-#define SYS_BIND 49
-#define SYS_LISTEN 50
-#define SYS_TIME 201
-#define SYS_EXIT 60
+// Arm has a little different syscall for getting unix timestamps
+static inline int64_t get_timestamp()
+{
+#if defined(__x86_64__)
+	return syscall1(SYS_TIME, 0);
+#elif defined(__aarch64__)
+	int64_t tv[2];
+	// syscall 169 is gettimeofday
+	// x0 = pointer to struct, x1 = timezone (0)
+	register int64_t x8 __asm__("x8") = 169;
+	register int64_t x0 __asm__("x0") = (int64_t)tv;
+	register int64_t x1 __asm__("x1") = 0;
+	__asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1) : "memory");
+	return tv[0];
+#endif
+}
 
-// Entry point since we aren't using libc's crt0
+// Entry point since we aren't using libc's main
 void _start()
 {
-	// --- printDate Logic ---
-	int64_t ts = syscall1(SYS_TIME, 0);
-	uint64_t days = (uint64_t)ts / 86400;
-
-	uint64_t year = 1970;
-	while (1)
+	// print date
 	{
-		uint64_t leap = ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)) ? 366 : 365;
-		if (days < leap)
-			break;
-		days -= leap;
-		year += 1;
+		int64_t ts = get_timestamp();
+		uint64_t days = (uint64_t)ts / 86400;
+
+		uint64_t year = 1970;
+		while (1)
+		{
+			uint64_t leap = ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)) ? 366 : 365;
+			if (days < leap)
+				break;
+			days -= leap;
+			year += 1;
+		}
+
+		uint64_t month_days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+		uint64_t month = 0;
+		while (month < 12)
+		{
+			uint64_t m_len = month_days[month];
+			if (month == 1 && ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)))
+				m_len = 29;
+			if (days < m_len)
+				break;
+			days -= m_len;
+			month++;
+		}
+
+		uint64_t day = days + 1;
+		month += 1;
+
+		char buf[11] = {};
+		buf[0] = (char)(48 + day / 10);
+		buf[1] = (char)(48 + day % 10);
+		buf[2] = '.';
+		buf[3] = (char)(48 + month / 10);
+		buf[4] = (char)(48 + month % 10);
+		buf[5] = '.';
+		buf[6] = (char)(48 + year / 1000);
+		buf[7] = (char)(48 + (year / 100) % 10);
+		buf[8] = (char)(48 + (year / 10) % 10);
+		buf[9] = (char)(48 + year % 10);
+		buf[10] = '\n';
+
+		syscall3(SYS_WRITE, 1, (int64_t)buf, 11);
 	}
 
-	uint64_t month_days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-	uint64_t month = 0;
-	while (month < 12)
-	{
-		uint64_t m_len = month_days[month];
-		if (month == 1 && ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)))
-			m_len = 29;
-		if (days < m_len)
-			break;
-		days -= m_len;
-		month++;
-	}
-
-	uint64_t day = days + 1;
-	month += 1;
-
-	char buf[11] = {};
-	buf[0] = (char)(48 + day / 10);
-	buf[1] = (char)(48 + day % 10);
-	buf[2] = '.';
-	buf[3] = (char)(48 + month / 10);
-	buf[4] = (char)(48 + month % 10);
-	buf[5] = '.';
-	buf[6] = (char)(48 + year / 1000);
-	buf[7] = (char)(48 + (year / 100) % 10);
-	buf[8] = (char)(48 + (year / 10) % 10);
-	buf[9] = (char)(48 + year % 10);
-	buf[10] = '\n';
-
-	syscall3(SYS_WRITE, 1, (int64_t)buf, 11);
-
-	// --- Networking Logic ---
 	const char *name = "Autor: Bartłomiej Deska\n";
 	syscall3(SYS_WRITE, 1, (int64_t)name, 26);
 
 	const char *portMsg = "Aplikacja nasłuchuje na porcie 3000\n";
 	syscall3(SYS_WRITE, 1, (int64_t)portMsg, 37);
 
+	// NETWORK SERVER
 	int64_t sock = syscall3(SYS_SOCKET, 2, 1, 0); // AF_INET, SOCK_STREAM
 
-	// sockaddr_in manual layout: sin_family (2), sin_port (3000 = 0x0BB8), sin_addr (0)
+	// sockaddr_in manual layout: sin_family (2), sin_port (3000 = 0x0BB8), sin_addr (0) all 0.0.0.0
 	uint8_t addr[16] = {0};
 	addr[0] = 2;	// AF_INET
 	addr[2] = 0x0B; // Port 3000 MSB
@@ -142,6 +159,7 @@ void _start()
 	syscall3(SYS_BIND, sock, (int64_t)addr, 16);
 	syscall2(SYS_LISTEN, sock, 10);
 
+	// HTTP RESPONSE
 	const char msg[] =
 		"HTTP/1.1 200 OK\r\n"
 		"Content-Type: text/html;charset=utf8\r\n"
@@ -154,12 +172,13 @@ void _start()
 		"fetch(`https://api.open-meteo.com/v1/forecast?latitude=${e}&longitude=${t}&current=temperature_2m,weather_code`)"
 		".then(e=>e.json()).then(e=>{o.innerHTML=`${e.current.temperature_2m}°C ${z(e.current.weather_code)}`})}</script>";
 
+	// Server loop
 	while (1)
 	{
 		int64_t client_fd = syscall3(SYS_ACCEPT, sock, 0, 0);
 		if (client_fd >= 0)
 		{
-			syscall3(SYS_WRITE, client_fd, (int64_t)msg, sizeof(msg) - 1); // Length of the string
+			syscall3(SYS_WRITE, client_fd, (int64_t)msg, sizeof(msg) - 1);
 			syscall1(SYS_CLOSE, client_fd);
 		}
 	}
