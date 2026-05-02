@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+#syntax=docker/dockerfile:1
 FROM alpine AS build
 RUN apk add build-base
 WORKDIR /app

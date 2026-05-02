@@ -1,3 +1,5 @@
+# Zadanie 3
+
 # Tworzenie buildera
 
 ```bash
@@ -34,28 +36,28 @@ sudo docker buildx imagetools inspect pan1jan1/smol-server:v2.0
 ```
 Name:      docker.io/pan1jan1/smol-server:v2.0
 MediaType: application/vnd.oci.image.index.v1+json
-Digest:    sha256:1029b3b80bf6d3a22337e9497f01b00d50f7deee790be7c687aef75228ced8bb
+Digest:    sha256:76377743feeecdbd1778856f894d05820ddb478d79ef73d106eccf82db23a791
 
 Manifests:
-  Name:        docker.io/pan1jan1/smol-server:v2.0@sha256:836d42793add2ceaab03c8d7563f88ab35c3602becda8e1c3a3ae752ceda5f9c
+  Name:        docker.io/pan1jan1/smol-server:v2.0@sha256:3c06914d4fe1d698b2f5d4619bd23ef5dd8f9e83963a35c187ab2df23db3b751
   MediaType:   application/vnd.oci.image.manifest.v1+json
   Platform:    linux/amd64
 
-  Name:        docker.io/pan1jan1/smol-server:v2.0@sha256:29dc80635b2502d2c71a38266d6a34434499bc441786c3e1fd571f9419f25d58
+  Name:        docker.io/pan1jan1/smol-server:v2.0@sha256:994c4fe2513fc948081ea37643ef06cc733b00b9e766d443099f9639d6cac677
   MediaType:   application/vnd.oci.image.manifest.v1+json
   Platform:    linux/arm64
 
-  Name:        docker.io/pan1jan1/smol-server:v2.0@sha256:c2cb5ff855c3f025802ed4ab43a9d0e0307ee330b89e386e3a7decd33a88c6dd
+  Name:        docker.io/pan1jan1/smol-server:v2.0@sha256:27f25dee9046f1abee8e70eaf2eea4a4a2491b3daa955f5ebc64007f0d828c05
   MediaType:   application/vnd.oci.image.manifest.v1+json
   Platform:    unknown/unknown
   Annotations:
-    vnd.docker.reference.digest: sha256:836d42793add2ceaab03c8d7563f88ab35c3602becda8e1c3a3ae752ceda5f9c
+    vnd.docker.reference.digest: sha256:3c06914d4fe1d698b2f5d4619bd23ef5dd8f9e83963a35c187ab2df23db3b751
     vnd.docker.reference.type:   attestation-manifest
 
-  Name:        docker.io/pan1jan1/smol-server:v2.0@sha256:c768ed2883fd6e03516db7837c9ad929d742eb65e3ff07356ee4f496494c3318
+  Name:        docker.io/pan1jan1/smol-server:v2.0@sha256:fbbd7465ae7b40dcedec1c6948eef72d8623950d50f06d63ea2b3ab3d0dd2e1d
   MediaType:   application/vnd.oci.image.manifest.v1+json
   Platform:    unknown/unknown
   Annotations:
+    vnd.docker.reference.digest: sha256:994c4fe2513fc948081ea37643ef06cc733b00b9e766d443099f9639d6cac677
     vnd.docker.reference.type:   attestation-manifest
-    vnd.docker.reference.digest: sha256:29dc80635b2502d2c71a38266d6a34434499bc441786c3e1fd571f9419f25d58
 ```
