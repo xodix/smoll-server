@@ -1,5 +1,10 @@
 #include <stdint.h>
 
+#define AF_INET 2
+#define SOCK_STREAM 1
+
+void health_check();
+
 // BAD implementation of memcpy! ARM64 requires memcpy to copy from .data to the stack.
 void *memcpy(void *dest, const void *src, unsigned int n)
 {
@@ -21,6 +26,15 @@ void *memcpy(void *dest, const void *src, unsigned int n)
 #define SYS_LISTEN 50
 #define SYS_TIME 201
 #define SYS_EXIT 60
+#define SYS_CONNECT 42
+
+static inline long syscall6(long n, long a1, long a2, long a3, long a4, long a5, long a6)
+{
+	long ret;
+	__asm__ volatile("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+											 "d"(a3), "r"(a4), "r"(a5), "r"(a6) : "rcx", "r11", "memory");
+	return ret;
+}
 
 static inline int64_t syscall3(int64_t nr, int64_t a1, int64_t a2, int64_t a3)
 {
@@ -43,6 +57,20 @@ static inline int64_t syscall3(int64_t nr, int64_t a1, int64_t a2, int64_t a3)
 #define SYS_LISTEN 201
 #define SYS_EXIT 93
 #define SYS_GETTIME 113
+#define SYS_CONNECT 203
+
+static inline long syscall6(long n, long a1, long a2, long a3, long a4, long a5, long a6)
+{
+	register long x8 __asm__("x8") = n;
+	register long x0 __asm__("x0") = a1;
+	register long x1 __asm__("x1") = a2;
+	register long x2 __asm__("x2") = a3;
+	register long x3 __asm__("x3") = a4;
+	register long x4 __asm__("x4") = a5;
+	register long x5 __asm__("x5") = a6;
+	__asm__ volatile("svc #0" : "=r"(x0) : "r"(x8), "r"(x0), "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x5) : "memory");
+	return x0;
+}
 
 static inline int64_t syscall3(int64_t nr, int64_t a1, int64_t a2, int64_t a3)
 {
@@ -57,7 +85,6 @@ static inline int64_t syscall3(int64_t nr, int64_t a1, int64_t a2, int64_t a3)
 		: "memory");
 	return x0;
 }
-
 #else
 // If anyone wants support for more architectures ($$$) email me at: s101553@pollub.edu.pl
 #error "Unsupported Architecture"
@@ -91,8 +118,48 @@ static inline int64_t get_timestamp()
 #endif
 }
 
-// Entry point since we aren't using libc's main
-void _start()
+struct in_addr
+{
+	unsigned int s_addr;
+};
+
+struct sockaddr_in
+{
+	unsigned short sin_family; // AF_INET = 2
+	unsigned short sin_port;   // Must be Big-Endian (Network Byte Order)
+	struct in_addr sin_addr;
+	unsigned char sin_zero[8];
+};
+
+void health_check()
+{
+	// Create socket
+	int sock = syscall6(SYS_SOCKET, AF_INET, SOCK_STREAM, 0, 0, 0, 0);
+	if (sock < 0)
+		syscall1(SYS_EXIT, 1);
+
+	// Setup Address (127.0.0.1 : 3000)
+	struct sockaddr_in addr = {
+		.sin_family = AF_INET,
+		.sin_port = 0xB80B,			  // 3000 in Big-Endian (0x1F90)
+		.sin_addr.s_addr = 0x0100007F // 127.0.0.1 in Big-Endian
+	};
+
+	// Connect
+	long ret_connect = syscall6(SYS_CONNECT, sock, (long)&addr, sizeof(addr), 0, 0, 0);
+	if (ret_connect < 0)
+		syscall1(SYS_EXIT, 1);
+
+	// Send a message
+	char *msg = "Hello!";
+	long ret_write = syscall6(SYS_WRITE, sock, (long)msg, 6, 0, 0, 0);
+	if (ret_write < 0)
+		syscall1(SYS_EXIT, 1);
+
+	syscall1(SYS_EXIT, 0);
+}
+
+void main()
 {
 	// print date
 	{
@@ -183,3 +250,36 @@ void _start()
 		}
 	}
 }
+
+// Entry point main()
+#if defined(__x86_64__)
+void __attribute__((naked)) _start()
+{
+	long *p;
+	__asm__("mov %%rsp, %0" : "=r"(p));
+
+	long argc = p[0];
+	if (argc > 1)
+		health_check();
+	main();
+}
+#elif defined(__aarch64__)
+__asm__(
+	".global _start\n"
+	"_start:\n"
+	"ldr x0, [sp]\n"	 // Load argc from [sp] into 1st argument
+	"mov x1, sp\n"		 // Move sp into x1
+	"and x1, x1, #-16\n" // Align to 16 bytes
+	"mov sp, x1\n"		 // Set aligned sp
+	"bl main_logic\n"	 // Call our logic
+);
+void main_logic(long argc)
+{
+	if (argc > 1)
+	{
+		health_check();
+	}
+	main();
+	syscall1(SYS_EXIT, 0); // Always exit!
+}
+#endif

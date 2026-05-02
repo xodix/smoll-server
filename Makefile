@@ -1,5 +1,8 @@
 all:
-	gcc -Os -nostdlib -static \
+	gcc -Os -nostdlib -static -no-pie \
+		-Wl,-z,common-page-size=4096 \
+		-Wl,-z,max-page-size=4096 \
+		-march=native \
 		-fno-asynchronous-unwind-tables \
 		-fno-stack-protector \
 		-fno-ident \
@@ -7,4 +10,4 @@ all:
 		-Wl,-n \
 		-Wl,--nmagic \
 		-Wl,--build-id=none \
-		-s main.c -o server
+		-s server.c -o server
